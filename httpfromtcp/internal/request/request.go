@@ -44,9 +44,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 			return nil, err
 		}
 		if n > 0 {
-			newBuf := make([]byte, cap(buf))
-			copy(newBuf, buf[readToIndex:])
-			buf = newBuf
+			copy(buf, buf[readToIndex:])
 			readToIndex -= n
 		}
 	}
