@@ -1,4 +1,4 @@
-module exercise1
+module httpfromtcp
 
 go 1.24.6
 
