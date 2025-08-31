@@ -3,19 +3,19 @@ package headers
 import (
 	"errors"
 	"strings"
-	"unicode"
 )
 
 type Headers map[string]string
 
-var crlf []byte = []byte("\r\n")
+const crlf string = "\r\n"
+const validChars string = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&'*+-.^_`|~"
 
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	str := string(data)
 	if !strings.Contains(str, "\r\n") {
 		return 0, false, nil
 	}
-	crlfIndex := strings.Index(str, string(crlf))
+	crlfIndex := strings.Index(str, crlf)
 	if crlfIndex == 0 {
 		return len(data[:crlfIndex+len(crlf)]), true, nil
 	}
@@ -32,14 +32,14 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	fieldValue := str[sepIndex+1:]
 
 	for _, c := range fieldName {
-		if unicode.IsSpace(c) {
-			return 0, false, errors.New("Headers malformed. Whitespace in field name")
+		if !strings.Contains(validChars, string(c)) {
+			return 0, false, errors.New("Headers malformed. Non-valid character in header")
 		}
 	}
 
 	fieldName = strings.TrimSpace(fieldName)
 	fieldValue = strings.TrimSpace(fieldValue)
 
-	h[fieldName] = fieldValue
+	h[strings.ToLower(fieldName)] = fieldValue
 	return len(data[:crlfIndex+len(crlf)]), false, nil
 }
