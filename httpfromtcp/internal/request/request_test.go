@@ -20,10 +20,7 @@ func (cr *chunkReader) Read(p []byte) (n int, err error) {
 	if cr.pos >= len(cr.data) {
 		return 0, io.EOF
 	}
-	endIndex := cr.pos + cr.numBytesPerRead
-	if endIndex > len(cr.data) {
-		endIndex = len(cr.data)
-	}
+	endIndex := min(cr.pos+cr.numBytesPerRead, len(cr.data))
 	n = copy(p, cr.data[cr.pos:endIndex])
 	cr.pos += n
 
@@ -76,5 +73,55 @@ func TestRequestLineParse(t *testing.T) {
 	// Test: Invalid protocol in Request Line
 	reader = &chunkReader{data: "GET /coffee HTML/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n", numBytesPerRead: 2}
 	_, err = RequestFromReader(reader)
+	require.Error(t, err)
+}
+
+func TestHeadersParse(t *testing.T) {
+	// Test: Standard Headers
+	reader := &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err := RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "localhost:42069", r.Headers["host"])
+	assert.Equal(t, "curl/7.81.0", r.Headers["user-agent"])
+	assert.Equal(t, "*/*", r.Headers["accept"])
+
+	// Test: Empty Headers
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\n\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, len(r.Headers), 0)
+
+	// Test: Malformed Header
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost localhost:42069\r\n\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.Error(t, err)
+
+	// Test: Duplicate Headers and Case Insensitive Headers
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHoST: localhost:42069\r\nhOSt: localhost:42069\r\n\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "localhost:42069, localhost:42069", r.Headers["host"])
+
+	// Test: Missing End of Headers
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
 	require.Error(t, err)
 }

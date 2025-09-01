@@ -12,7 +12,7 @@ const validChars string = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0
 
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	str := string(data)
-	if !strings.Contains(str, "\r\n") {
+	if !strings.Contains(str, crlf) {
 		return 0, false, nil
 	}
 	crlfIndex := strings.Index(str, crlf)
@@ -40,6 +40,11 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	fieldName = strings.TrimSpace(fieldName)
 	fieldValue = strings.TrimSpace(fieldValue)
 
-	h[strings.ToLower(fieldName)] = fieldValue
+	if v, ok := h[strings.ToLower(fieldName)]; ok {
+		h[strings.ToLower(fieldName)] = v + ", " + fieldValue
+	} else {
+		h[strings.ToLower(fieldName)] = fieldValue
+	}
+
 	return len(data[:crlfIndex+len(crlf)]), false, nil
 }

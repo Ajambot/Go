@@ -2,6 +2,7 @@ package request
 
 import (
 	"errors"
+	"httpfromtcp/internal/headers"
 	"io"
 	"strings"
 )
@@ -10,8 +11,15 @@ const bufSize int = 8
 
 type Request struct {
 	RequestLine RequestLine
-	Status      int // 0 is initialized, 1 is done
+	Status      int
+	Headers     headers.Headers
 }
+
+const (
+	Initialized    int = iota // 0
+	ParsingHeaders            // 1
+	Done                      // 2
+)
 
 type RequestLine struct {
 	HttpVersion   string
@@ -20,31 +28,30 @@ type RequestLine struct {
 }
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	req := &Request{Status: 0}
+	req := &Request{Headers: headers.Headers{}, Status: Initialized}
 
 	buf := make([]byte, bufSize)
 	readToIndex := 0
 
-	for req.Status != 1 {
-		if len(buf) == cap(buf) {
+	for req.Status != Done {
+		if readToIndex >= cap(buf) {
 			newBuf := make([]byte, cap(buf)*2)
 			copy(newBuf, buf)
 			buf = newBuf
 		}
 		n, err := reader.Read(buf[readToIndex:])
 		if err == io.EOF {
-			req.Status = 1
-			break
+			return nil, errors.New("Error: Received End of Input while Parser Status Is Not Done")
 		}
 
 		readToIndex += n
 
-		n, err = req.parse(buf)
+		n, err = req.parse(buf[:readToIndex])
 		if err != nil {
 			return nil, err
 		}
 		if n > 0 {
-			copy(buf, buf[readToIndex:])
+			copy(buf, buf[n:])
 			readToIndex -= n
 		}
 	}
@@ -83,22 +90,48 @@ func parseRequestLine(request string) (*RequestLine, int, error) {
 
 	version = version[5:]
 
-	return &RequestLine{HttpVersion: version, RequestTarget: target, Method: method}, len(reqLine), nil
+	return &RequestLine{HttpVersion: version, RequestTarget: target, Method: method}, len(reqLine) + len("\r\n"), nil
+}
+
+func (r *Request) parseSingleHeader(data []byte) (int, error) {
+	n, done, err := r.Headers.Parse(data)
+
+	if err != nil {
+		return 0, err
+	}
+
+	if done {
+		r.Status = Done
+	}
+
+	return n, nil
 }
 
 func (r *Request) parse(data []byte) (int, error) {
-	if r.Status == 1 {
+	switch r.Status {
+	case Initialized:
+		reqLine, n, err := parseRequestLine(string(data))
+
+		if n > 0 {
+			r.RequestLine = *reqLine
+			r.Status = ParsingHeaders
+		}
+
+		return n, err
+
+	case ParsingHeaders:
+		totalBytesParsed := 0
+		for {
+			n, err := r.parseSingleHeader(data[totalBytesParsed:])
+			totalBytesParsed += n
+			if err != nil || n == 0 || totalBytesParsed >= len(data) {
+				return totalBytesParsed, err
+			}
+		}
+
+	case Done:
 		return 0, errors.New("Error: trying to read data in a done state")
-	} else if r.Status != 0 {
-		return 0, errors.New("Error: unknown state")
+	default:
+		return 0, errors.New("Error: Unexpected Parser State")
 	}
-
-	reqLine, n, err := parseRequestLine(string(data))
-
-	if n > 0 {
-		r.RequestLine = *reqLine
-		r.Status = 1
-	}
-
-	return n, err
 }
