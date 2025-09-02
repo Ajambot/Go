@@ -85,9 +85,12 @@ func TestHeadersParse(t *testing.T) {
 	r, err := RequestFromReader(reader)
 	require.NoError(t, err)
 	require.NotNil(t, r)
-	assert.Equal(t, "localhost:42069", r.Headers["host"])
-	assert.Equal(t, "curl/7.81.0", r.Headers["user-agent"])
-	assert.Equal(t, "*/*", r.Headers["accept"])
+	v, _ := r.Headers.Get("hOst")
+	assert.Equal(t, "localhost:42069", v)
+	v, _ = r.Headers.Get("User-Agent")
+	assert.Equal(t, "curl/7.81.0", v)
+	v, _ = r.Headers.Get("Accept")
+	assert.Equal(t, "*/*", v)
 
 	// Test: Empty Headers
 	reader = &chunkReader{
@@ -97,7 +100,7 @@ func TestHeadersParse(t *testing.T) {
 	r, err = RequestFromReader(reader)
 	require.NoError(t, err)
 	require.NotNil(t, r)
-	assert.Equal(t, len(r.Headers), 0)
+	assert.Equal(t, r.Headers.Length(), 0)
 
 	// Test: Malformed Header
 	reader = &chunkReader{
@@ -115,7 +118,8 @@ func TestHeadersParse(t *testing.T) {
 	r, err = RequestFromReader(reader)
 	require.NoError(t, err)
 	require.NotNil(t, r)
-	assert.Equal(t, "localhost:42069, localhost:42069", r.Headers["host"])
+	v, _ = r.Headers.Get("hOst")
+	assert.Equal(t, "localhost:42069, localhost:42069", v)
 
 	// Test: Missing End of Headers
 	reader = &chunkReader{
@@ -124,4 +128,70 @@ func TestHeadersParse(t *testing.T) {
 	}
 	r, err = RequestFromReader(reader)
 	require.Error(t, err)
+}
+
+func TestBodyParse(t *testing.T) {
+	// Test: Standard Body
+	reader := &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"Content-Length: 13\r\n" +
+			"\r\n" +
+			"hello world!\n",
+		numBytesPerRead: 3,
+	}
+	r, err := RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "hello world!\n", string(r.Body))
+
+	// Test: Emtpy Body, 0 reported content length (valid)
+	reader = &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"Content-Length: 0\r\n" +
+			"\r\n",
+		numBytesPerRead: 5,
+	}
+	r, err = RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, len(r.Body), 0)
+
+	// Test: Emtpy Body, no reported content length (valid)
+	reader = &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, len(r.Body), 0)
+
+	// Test: Body shorter than reported content length
+	reader = &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"Content-Length: 20\r\n" +
+			"\r\n" +
+			"partial content",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.Error(t, err)
+
+	// Test: No Content-Length but Body Exists (We assume no body since no Content-Length. Body is not parsed)
+	reader = &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"\r\n" +
+			"Existing Body",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	require.Nil(t, r.Body)
 }

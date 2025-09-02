@@ -5,7 +5,43 @@ import (
 	"strings"
 )
 
-type Headers map[string]string
+type Headers struct {
+	values map[string]string
+}
+
+func NewHeaders() Headers {
+	return Headers{values: make(map[string]string)}
+}
+
+func (h Headers) Get(key string) (string, bool) {
+	v, ok := h.values[strings.ToLower(key)]
+
+	return v, ok
+}
+
+func (h Headers) Set(key, value string) {
+	if v, ok := h.values[strings.ToLower(key)]; ok {
+		h.values[strings.ToLower(key)] = v + ", " + value
+	} else {
+		h.values[strings.ToLower(key)] = value
+	}
+}
+
+func (h Headers) Length() int {
+	return len(h.values)
+}
+
+func (h Headers) Range() <-chan [2]string {
+	keyValChan := make(chan [2]string)
+	go func() {
+		for k, v := range h.values {
+			var keyVal = [2]string{k, v}
+			keyValChan <- keyVal
+		}
+		close(keyValChan)
+	}()
+	return keyValChan
+}
 
 const crlf string = "\r\n"
 const validChars string = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&'*+-.^_`|~"
@@ -40,11 +76,7 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	fieldName = strings.TrimSpace(fieldName)
 	fieldValue = strings.TrimSpace(fieldValue)
 
-	if v, ok := h[strings.ToLower(fieldName)]; ok {
-		h[strings.ToLower(fieldName)] = v + ", " + fieldValue
-	} else {
-		h[strings.ToLower(fieldName)] = fieldValue
-	}
+	h.Set(fieldName, fieldValue)
 
 	return len(data[:crlfIndex+len(crlf)]), false, nil
 }
