@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
 	"io"
@@ -16,7 +15,7 @@ type HandlerError struct {
 	Message    string
 }
 
-type Handler func(w io.Writer, req *request.Request) *HandlerError
+type Handler func(w *response.Writer, req *request.Request)
 
 type Server struct {
 	listener net.Listener
@@ -24,13 +23,17 @@ type Server struct {
 }
 
 func (he *HandlerError) WriteError(w io.Writer) error {
-	err := response.WriteStatusLine(w, he.StatusCode)
+	buf := new(response.Writer)
+	err := buf.WriteStatusLine(he.StatusCode)
 	if err != nil {
 		return err
 	}
 	h := response.GetDefaultHeaders(len(he.Message))
-	response.WriteHeaders(w, h)
-	_, err = w.Write([]byte(he.Message))
+	err = buf.WriteHeaders(h)
+	if err != nil {
+		return err
+	}
+	_, err = buf.WriteBody([]byte(he.Message))
 	return err
 }
 
@@ -80,51 +83,6 @@ func (s *Server) handle(conn net.Conn, handler Handler) {
 		}
 		return
 	}
-	body := new(bytes.Buffer)
-	herror := handler(body, req)
-	if herror != nil {
-		err := herror.WriteError(conn)
-		if err != nil {
-			log.Println("Error writing handler error to the connection")
-		}
-	} else {
-		res := new(bytes.Buffer)
-		err = response.WriteStatusLine(res, 200)
-		if err != nil {
-			intError := HandlerError{StatusCode: 500, Message: "Error Writing Status Line"}
-			err := intError.WriteError(conn)
-			if err != nil {
-				log.Println("Error Writing Internal Error to the Connection")
-			}
-			return
-		}
-		h := response.GetDefaultHeaders(body.Len())
-		err = response.WriteHeaders(res, h)
-		if err != nil {
-			intError := HandlerError{StatusCode: 500, Message: "Error Writing Headers"}
-			err := intError.WriteError(conn)
-			if err != nil {
-				log.Println("Error Writing Internal Error to the Connection")
-			}
-			return
-		}
-		_, err = body.WriteTo(res)
-		if err != nil {
-			intError := HandlerError{StatusCode: 500, Message: "Error Writing Response Body"}
-			err := intError.WriteError(conn)
-			if err != nil {
-				log.Println("Error Writing Internal Error to the Connection")
-			}
-			return
-		}
-		_, err := res.WriteTo(conn)
-		if err != nil {
-			intError := HandlerError{StatusCode: 500, Message: "Error Writing Response to Connection"}
-			err := intError.WriteError(conn)
-			if err != nil {
-				log.Println("Error Writing Internal Error to the Connection")
-			}
-			return
-		}
-	}
+	body := response.Writer{Buffer: conn}
+	handler(&body, req)
 }
