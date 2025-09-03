@@ -23,6 +23,10 @@ func (h Headers) Overwrite(key, value string) {
 	h.values[strings.ToLower(key)] = value
 }
 
+func (h Headers) Remove(key string) {
+	delete(h.values, strings.ToLower(key))
+}
+
 func (h Headers) Set(key, value string) {
 	if v, ok := h.values[strings.ToLower(key)]; ok {
 		h.values[strings.ToLower(key)] = v + ", " + value

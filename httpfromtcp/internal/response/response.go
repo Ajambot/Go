@@ -13,6 +13,7 @@ const (
 	WritingStatusLine int = iota
 	WritingHeaders
 	WritingBody
+	WritingTrailers
 	Done
 )
 
@@ -51,6 +52,27 @@ func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
 	}
 }
 
+func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
+	n, err := fmt.Fprintf(w.Buffer, "%X\r\n", len(p))
+	if err != nil {
+		return n, err
+	}
+
+	n, err = w.Buffer.Write(p)
+	if err != nil {
+		return n, err
+	}
+
+	n, err = w.Buffer.Write([]byte("\r\n"))
+	return n, err
+}
+
+func (w *Writer) WriteChunkedBodyDone() (int, error) {
+	n, err := w.Buffer.Write([]byte("0\r\n"))
+	w.writerState = WritingTrailers
+	return n, err
+}
+
 func GetDefaultHeaders(contentLen int) headers.Headers {
 	h := headers.NewHeaders()
 	h.Set("Content-Length", fmt.Sprint(contentLen))
@@ -73,6 +95,22 @@ func (w *Writer) WriteHeaders(headers headers.Headers) error {
 	}
 	_, err := w.Buffer.Write([]byte("\r\n"))
 	w.writerState = WritingBody
+	return err
+}
+
+func (w *Writer) WriteTrailers(trailers headers.Headers) error {
+	if w.writerState != WritingTrailers {
+		return errors.New("Error: Writer not in WritingTrailers state")
+	}
+	ch := trailers.Range()
+	for h := range ch {
+		_, err := w.Buffer.Write([]byte(h[0] + ": " + h[1] + "\r\n"))
+		if err != nil {
+			return err
+		}
+	}
+	_, err := w.Buffer.Write([]byte("\r\n"))
+	w.writerState = Done
 	return err
 }
 
