@@ -52,8 +52,8 @@ const port = 42069
 
 func main() {
 	handler := func(w *response.Writer, req *request.Request) {
-		h := response.GetDefaultHeaders(len(intSer))
 		if req.RequestLine.RequestTarget == "/yourproblem" {
+			h := response.GetDefaultHeaders(len(badReq))
 			err := w.WriteStatusLine(400)
 			if err != nil {
 				log.Fatal("Error", err)
@@ -74,6 +74,7 @@ func main() {
 		}
 
 		if req.RequestLine.RequestTarget == "/myproblem" {
+			h := response.GetDefaultHeaders(len(intSer))
 			err := w.WriteStatusLine(500)
 			if err != nil {
 				log.Fatal("Error", err)
@@ -92,7 +93,37 @@ func main() {
 			}
 			return
 		}
+
+		if req.RequestLine.RequestTarget == "/video" {
+			vid, err := os.ReadFile("assets/vim.mp4")
+			if err != nil {
+				log.Fatal("Error", err)
+				return
+			}
+			h := response.GetDefaultHeaders(len(vid))
+			h.Overwrite("Content-Type", "video/mp4")
+			err = w.WriteStatusLine(200)
+			if err != nil {
+				log.Fatal("Error", err)
+				return
+			}
+			fmt.Println(h)
+			err = w.WriteHeaders(h)
+			if err != nil {
+				log.Fatal("Error", err)
+				return
+			}
+			n, err := w.WriteBody(vid)
+			fmt.Println(len(vid), n)
+			if err != nil {
+				log.Fatal("Error", err)
+				return
+			}
+			return
+		}
+
 		if strings.HasPrefix(req.RequestLine.RequestTarget, "/httpbin/") {
+			h := response.GetDefaultHeaders(0)
 			target := strings.TrimPrefix(req.RequestLine.RequestTarget, "/httpbin/")
 			h.Remove("Content-Length")
 			h.Set("Transfer-Encoding", "chunked")
@@ -147,6 +178,7 @@ func main() {
 			return
 		}
 
+		h := response.GetDefaultHeaders(len(ok))
 		err := w.WriteStatusLine(200)
 		if err != nil {
 			log.Fatal("Error", err)
