@@ -95,26 +95,30 @@ func main() {
 		}
 
 		if req.RequestLine.RequestTarget == "/video" {
-			vid, err := os.ReadFile("assets/vim.mp4")
+			vid, err := os.Open("assets/vim.mp4")
 			if err != nil {
 				log.Fatal("Error", err)
 				return
 			}
-			h := response.GetDefaultHeaders(len(vid))
+			vidI, err := vid.Stat()
+			if err != nil {
+				log.Fatal("Error", err)
+				return
+			}
+			h := response.GetDefaultHeaders(int(vidI.Size()))
 			h.Overwrite("Content-Type", "video/mp4")
+			h.Set("Accept-Ranges", "none")
 			err = w.WriteStatusLine(200)
 			if err != nil {
 				log.Fatal("Error", err)
 				return
 			}
-			fmt.Println(h)
 			err = w.WriteHeaders(h)
 			if err != nil {
 				log.Fatal("Error", err)
 				return
 			}
-			n, err := w.WriteBody(vid)
-			fmt.Println(len(vid), n)
+			_, err = io.Copy(w.Buffer, vid)
 			if err != nil {
 				log.Fatal("Error", err)
 				return
