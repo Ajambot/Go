@@ -2,7 +2,7 @@ package request
 
 import (
 	"errors"
-	"httpfromtcp/internal/headers"
+	"httpfromtcp/pkg/headers"
 	"io"
 	"strconv"
 	"strings"

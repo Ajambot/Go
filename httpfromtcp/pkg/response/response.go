@@ -3,7 +3,7 @@ package response
 import (
 	"errors"
 	"fmt"
-	"httpfromtcp/internal/headers"
+	"httpfromtcp/pkg/headers"
 	"io"
 )
 

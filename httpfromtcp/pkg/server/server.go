@@ -1,8 +1,8 @@
 package server
 
 import (
-	"httpfromtcp/internal/request"
-	"httpfromtcp/internal/response"
+	"httpfromtcp/pkg/request"
+	"httpfromtcp/pkg/response"
 	"io"
 	"log"
 	"net"
