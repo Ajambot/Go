@@ -8,22 +8,30 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 )
 
-const ok = `<html>
-	<head>
-	<title>200 OK</title>
-	</head>
-	<body>
-	<h1>Success!</h1>
-	<p>Your request was an absolute banger.</p>
-	</body>
-	</html>`
-
-const port = 6967
-
 func main() {
+	port, err := strconv.Atoi(os.Args[1])
+	if err != nil {
+		log.Fatalf("Port is not a valid integer")
+		return
+	}
+	servNum := os.Args[2]
+
+	ok := fmt.Sprintf(`
+		<html>
+			<head>
+				<title>200 OK</title>
+			</head>
+			<body>
+				<h1>Success!</h1>
+				<p>Request returned from server %s</p>
+			</body>
+		</html>
+		`, servNum)
+
 	handler := func(w *response.Writer, req *request.Request) {
 		fmt.Println("Received request")
 		h := response.GetDefaultHeaders(len(ok))
@@ -45,12 +53,13 @@ func main() {
 		}
 	}
 
-	server, err := server.Serve(port, handler)
+	server, err := server.Serve(int(port), handler)
 	if err != nil {
 		log.Fatalf("Error starting server: %v", err)
+		return
 	}
 	defer server.Close()
-	log.Println("Server started on port", port)
+	log.Printf("Server %s started on port %d", servNum, port)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
