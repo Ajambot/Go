@@ -7,6 +7,7 @@ import (
 	"httpfromtcp/pkg/response"
 	httpserver "httpfromtcp/pkg/server"
 	"io"
+	"loadbalancer/pkg/algorithm"
 	"loadbalancer/pkg/server"
 	"log"
 	"net/http"
@@ -16,13 +17,21 @@ import (
 	"syscall"
 )
 
-type LoadBalancer struct {
-	Servers   []server.Server
-	Scheduler string
+type Scheduler interface {
+	Next([]server.Server) (int, error)
 }
 
-func MakeLB(algorithm string) *LoadBalancer {
-	return &LoadBalancer{make([]server.Server, 0), algorithm}
+type LoadBalancer struct {
+	Servers   []server.Server
+	scheduler Scheduler
+}
+
+func MakeLB(algo string) *LoadBalancer {
+	var scheduler Scheduler
+	if algo == "rr" {
+		scheduler = algorithm.NewRoundRobin()
+	}
+	return &LoadBalancer{make([]server.Server, 0), scheduler}
 }
 
 func (lb *LoadBalancer) Register(server server.Server) {
@@ -38,9 +47,14 @@ func (lb *LoadBalancer) Remove(id int) {
 	}
 }
 
-func handler(w *response.Writer, req *request.Request) {
+func (lb *LoadBalancer) handler(w *response.Writer, req *request.Request) {
 	fmt.Println("Received a request")
-	targetUrl := "http://localhost:6967" // different port for VMs
+	nextServer, err := lb.scheduler.Next(lb.Servers)
+	if err != nil {
+		log.Fatal("Error", err)
+		return
+	}
+	targetUrl := fmt.Sprintf("http://localhost:%d", lb.Servers[nextServer].Id) // different port for VMs
 	newReq, err := http.NewRequest(req.RequestLine.Method, targetUrl+req.RequestLine.RequestTarget, bytes.NewReader(req.Body))
 	if err != nil {
 		log.Fatal("Error", err)
@@ -90,7 +104,7 @@ func handler(w *response.Writer, req *request.Request) {
 
 func (lb *LoadBalancer) Start() {
 	port := 42069
-	lbServer, err := httpserver.Serve(port, handler)
+	lbServer, err := httpserver.Serve(port, lb.handler)
 	if err != nil {
 		log.Fatalf("Error starting server: %v", err)
 	}
