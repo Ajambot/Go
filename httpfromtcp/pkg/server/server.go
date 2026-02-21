@@ -64,7 +64,7 @@ func (s *Server) listen(handler Handler) {
 			break
 		}
 		if err != nil {
-			log.Fatal("error", err)
+			log.Print(err)
 			continue
 		}
 

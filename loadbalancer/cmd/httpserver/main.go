@@ -18,7 +18,6 @@ func main() {
 		log.Fatalf("Port is not a valid integer")
 		return
 	}
-	servNum := os.Args[2]
 
 	ok := fmt.Sprintf(`
 		<html>
@@ -27,10 +26,10 @@ func main() {
 			</head>
 			<body>
 				<h1>Success!</h1>
-				<p>Request returned from server %s</p>
+				<p>Request returned from server at port %d</p>
 			</body>
 		</html>
-		`, servNum)
+		`, port)
 
 	handler := func(w *response.Writer, req *request.Request) {
 		fmt.Println("Received request")
@@ -59,7 +58,7 @@ func main() {
 		return
 	}
 	defer server.Close()
-	log.Printf("Server %s started on port %d", servNum, port)
+	log.Printf("Server started on port %d", port)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
