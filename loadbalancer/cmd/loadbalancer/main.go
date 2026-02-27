@@ -7,7 +7,11 @@ import (
 )
 
 func main() {
-	lb := loadbalancer.MakeLB("rr")
+	lb, err := loadbalancer.MakeLB("rr")
+	if err != nil {
+		panic(err)
+	}
+
 	d, err := docker.GetInstance()
 	if err != nil {
 		panic(err)

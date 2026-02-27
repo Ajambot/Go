@@ -2,6 +2,7 @@ package loadbalancer
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"httpfromtcp/pkg/request"
 	"httpfromtcp/pkg/response"
@@ -26,12 +27,18 @@ type LoadBalancer struct {
 	scheduler Scheduler
 }
 
-func MakeLB(algo string) *LoadBalancer {
+func MakeLB(algo string) (*LoadBalancer, error) {
 	var scheduler Scheduler
-	if algo == "rr" {
+	switch algo {
+	case "rr":
 		scheduler = algorithm.NewRoundRobin()
+	case "wrr":
+		scheduler = algorithm.NewWeightedRoundRobin()
+	default:
+		return nil, errors.New("Error: selected scheduling algorithm is not valid")
 	}
-	return &LoadBalancer{make([]server.Server, 0), scheduler}
+
+	return &LoadBalancer{make([]server.Server, 0), scheduler}, nil
 }
 
 func (lb *LoadBalancer) Register(server server.Server) {
