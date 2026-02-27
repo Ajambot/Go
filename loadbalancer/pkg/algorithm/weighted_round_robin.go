@@ -18,7 +18,7 @@ func NewWeightedRoundRobin() *WeightedRoundRobin {
 	}
 }
 
-func (r *WeightedRoundRobin) Next(servers []server.Server) (int, error) {
+func (r *WeightedRoundRobin) Next(servers []*server.Server) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(servers) == 0 {

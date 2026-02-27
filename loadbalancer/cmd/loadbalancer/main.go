@@ -35,8 +35,8 @@ func main() {
 	}
 	defer d.StopContainer(id)
 
-	lb.Register(server.Server{Load: 0, Healthy: true, Id: 6767})
-	lb.Register(server.Server{Load: 0, Healthy: true, Id: 6967})
-	lb.Register(server.Server{Load: 0, Healthy: true, Id: 6969})
+	lb.Register(&server.Server{Healthy: true, Url: "http://localhost:6767"})
+	lb.Register(&server.Server{Healthy: true, Url: "http://localhost:6967"})
+	lb.Register(&server.Server{Healthy: true, Url: "http://localhost:6969"})
 	lb.Start()
 }

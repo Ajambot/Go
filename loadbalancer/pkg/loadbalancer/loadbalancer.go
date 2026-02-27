@@ -2,6 +2,7 @@ package loadbalancer
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"httpfromtcp/pkg/request"
@@ -16,14 +17,15 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 )
 
 type Scheduler interface {
-	Next([]server.Server) (int, error)
+	Next([]*server.Server) (int, error)
 }
 
 type LoadBalancer struct {
-	Servers   []server.Server
+	Servers   []*server.Server
 	scheduler Scheduler
 }
 
@@ -38,20 +40,15 @@ func MakeLB(algo string) (*LoadBalancer, error) {
 		return nil, errors.New("Error: selected scheduling algorithm is not valid")
 	}
 
-	return &LoadBalancer{make([]server.Server, 0), scheduler}, nil
+	return &LoadBalancer{make([]*server.Server, 0), scheduler}, nil
 }
 
-func (lb *LoadBalancer) Register(server server.Server) {
+func (lb *LoadBalancer) Register(server *server.Server) {
 	lb.Servers = append(lb.Servers, server)
 }
 
-func (lb *LoadBalancer) Remove(id int) {
-	for i, server := range lb.Servers {
-		if server.Id == id {
-			lb.Servers = append(lb.Servers[:i], lb.Servers[i+1:]...)
-			break
-		}
-	}
+func (lb *LoadBalancer) Remove(index int) {
+	lb.Servers = append(lb.Servers[:index], lb.Servers[index+1:]...)
 }
 
 func (lb *LoadBalancer) handler(w *response.Writer, req *request.Request) {
@@ -61,7 +58,7 @@ func (lb *LoadBalancer) handler(w *response.Writer, req *request.Request) {
 		log.Fatal("Error", err)
 		return
 	}
-	targetUrl := fmt.Sprintf("http://localhost:%d", lb.Servers[nextServer].Id) // different port for VMs
+	targetUrl := lb.Servers[nextServer].Url
 	newReq, err := http.NewRequest(req.RequestLine.Method, targetUrl+req.RequestLine.RequestTarget, bytes.NewReader(req.Body))
 	if err != nil {
 		log.Fatal("Error", err)
@@ -117,9 +114,49 @@ func (lb *LoadBalancer) Start() {
 	}
 	defer lbServer.Close()
 	log.Println("Server started on port", port)
+	go lb.healthCheckRoutine()
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 	log.Println("Server gracefully stopped")
+}
+
+func statusCheck(url string) (server.Stats, error) {
+	client := http.Client{
+		Timeout: 5 * time.Second,
+	}
+	resp, err := client.Get(url + "/status")
+	if err != nil {
+		log.Println()
+		return server.Stats{}, errors.New(fmt.Sprint(url, " unreachable. Error: ", err))
+	}
+
+	var status server.Stats
+	err = json.NewDecoder(resp.Body).Decode(&status)
+	if err != nil {
+		return server.Stats{}, err
+	}
+
+	return status, nil
+}
+
+func (lb *LoadBalancer) checkHealth() {
+	for _, r := range lb.Servers {
+		status, err := statusCheck(r.Url)
+		if err != nil {
+			log.Println("Error checking status of", r.Url, err)
+			r.SetHealthy(false)
+		}
+		r.Stats = status
+	}
+}
+
+func (lb *LoadBalancer) healthCheckRoutine() {
+	t := time.NewTicker(time.Second * 20)
+	for range t.C {
+		log.Println("Starting health check...")
+		lb.checkHealth()
+		log.Println("Health check completed")
+	}
 }
