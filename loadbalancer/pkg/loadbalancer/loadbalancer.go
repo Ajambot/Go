@@ -154,9 +154,12 @@ func (lb *LoadBalancer) checkHealth() {
 
 func (lb *LoadBalancer) healthCheckRoutine() {
 	t := time.NewTicker(time.Second * 20)
-	for range t.C {
+	for ; true; <-t.C { // Starts a health check immediately and then every 20 seconds
 		log.Println("Starting health check...")
 		lb.checkHealth()
 		log.Println("Health check completed")
+		//for i, r := range lb.Servers {
+		//	fmt.Println("Server ", i, " usage: ", r.Stats.CPUUsage)
+		//}
 	}
 }
