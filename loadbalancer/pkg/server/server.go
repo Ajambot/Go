@@ -1,9 +1,13 @@
 package server
 
-import "sync"
+import (
+	"sync"
+	"sync/atomic"
+)
 
 type Stats struct {
-	CPUUsage float64 `json:"CPUUsage"`
+	CPUUsage    float64 `json:"CPUUsage"`
+	Connections atomic.Int32
 }
 
 type Server struct {
@@ -18,4 +22,16 @@ func (s *Server) SetHealthy(healthy bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Healthy = healthy
+}
+
+func (s *Server) AddConnection() {
+	s.Stats.Connections.Add(1)
+}
+
+func (s *Server) RemoveConnection() {
+	s.Stats.Connections.Add(-1)
+}
+
+func (s *Server) Connections() int32 {
+	return s.Stats.Connections.Load()
 }

@@ -27,7 +27,7 @@ func (r *WeightedRoundRobin) Next(servers []*server.Server) (int, error) {
 		return -1, errors.New("List of servers is empty. Cannot select next server")
 	}
 
-	if r.repeat > 0 {
+	if servers[r.curServer].Healthy && r.repeat > 0 {
 		r.repeat -= 1
 		return r.curServer, nil
 	}

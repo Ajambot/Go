@@ -97,17 +97,20 @@ func main() {
 			h.Overwrite("Content-Type", "application/json")
 			err = w.WriteHeaders(h)
 			if err != nil {
-				log.Fatal("Error", err)
+				log.Println("Error", err)
 				return
 			}
 
 			_, err = w.WriteBody(resp)
 			if err != nil {
-				log.Fatal("Error", err)
+				log.Println("Error", err)
 				return
 			}
 
 		} else {
+			log.Println("Executing expensive calculation")
+			time.Sleep(5 * time.Second)
+			log.Println("Finished expensive calculation")
 			h := response.GetDefaultHeaders(len(ok))
 			err := w.WriteStatusLine(200)
 			if err != nil {
@@ -117,14 +120,15 @@ func main() {
 			h.Overwrite("Content-Type", "text/html")
 			err = w.WriteHeaders(h)
 			if err != nil {
-				log.Fatal("Error", err)
+				log.Println("Error", err)
 				return
 			}
 			_, err = w.WriteBody([]byte(ok))
 			if err != nil {
-				log.Fatal("Error", err)
+				log.Println("Error", err)
 				return
 			}
+
 		}
 	}
 

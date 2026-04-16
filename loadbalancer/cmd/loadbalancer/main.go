@@ -4,10 +4,11 @@ import (
 	"loadbalancer/pkg/docker"
 	"loadbalancer/pkg/loadbalancer"
 	"loadbalancer/pkg/server"
+	"time"
 )
 
 func main() {
-	lb, err := loadbalancer.MakeLB("rr")
+	lb, err := loadbalancer.MakeLB("rb", 5*time.Second)
 	if err != nil {
 		panic(err)
 	}

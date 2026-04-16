@@ -24,23 +24,32 @@ type Scheduler interface {
 	Next([]*server.Server) (int, error)
 }
 
-type LoadBalancer struct {
-	Servers   []*server.Server
-	scheduler Scheduler
+type StatsResponse struct {
+	CPUUsage float64 `json:"CPUUsage"`
 }
 
-func MakeLB(algo string) (*LoadBalancer, error) {
+type LoadBalancer struct {
+	Servers              []*server.Server
+	statusCheckFrequency time.Duration
+	scheduler            Scheduler
+}
+
+func MakeLB(algo string, statusCheckFrequency time.Duration) (*LoadBalancer, error) {
 	var scheduler Scheduler
 	switch algo {
 	case "rr":
 		scheduler = algorithm.NewRoundRobin()
 	case "wrr":
 		scheduler = algorithm.NewWeightedRoundRobin()
+	case "lc":
+		scheduler = algorithm.NewLeastConnections()
+	case "rb":
+		scheduler = algorithm.NewResourceBased()
 	default:
 		return nil, errors.New("Error: selected scheduling algorithm is not valid")
 	}
 
-	return &LoadBalancer{make([]*server.Server, 0), scheduler}, nil
+	return &LoadBalancer{make([]*server.Server, 0), statusCheckFrequency, scheduler}, nil
 }
 
 func (lb *LoadBalancer) Register(server *server.Server) {
@@ -52,11 +61,18 @@ func (lb *LoadBalancer) Remove(index int) {
 }
 
 func (lb *LoadBalancer) handler(w *response.Writer, req *request.Request) {
-	fmt.Println("Received a request")
+	log.Println("Received a request")
 	nextServer, err := lb.scheduler.Next(lb.Servers)
 	if err != nil {
 		log.Fatal("Error", err)
 		return
+	}
+	for lb.Servers[nextServer].Healthy == false {
+		nextServer, err = lb.scheduler.Next(lb.Servers)
+		if err != nil {
+			log.Fatal("Error", err)
+			return
+		}
 	}
 	targetUrl := lb.Servers[nextServer].Url
 	newReq, err := http.NewRequest(req.RequestLine.Method, targetUrl+req.RequestLine.RequestTarget, bytes.NewReader(req.Body))
@@ -71,6 +87,7 @@ func (lb *LoadBalancer) handler(w *response.Writer, req *request.Request) {
 	}
 
 	client := &http.Client{}
+	lb.Servers[nextServer].AddConnection()
 	resp, err := client.Do(newReq)
 	if err != nil {
 		log.Fatal("Error", err)
@@ -79,6 +96,7 @@ func (lb *LoadBalancer) handler(w *response.Writer, req *request.Request) {
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
+	lb.Servers[nextServer].RemoveConnection()
 	if err != nil {
 		log.Fatal("Error", err)
 		return
@@ -96,12 +114,12 @@ func (lb *LoadBalancer) handler(w *response.Writer, req *request.Request) {
 	}
 	err = w.WriteHeaders(newH)
 	if err != nil {
-		log.Fatal("Error", err)
+		log.Println("Error", err)
 		return
 	}
 	_, err = w.WriteBody(body)
 	if err != nil {
-		log.Fatal("Error", err)
+		log.Println("Error", err)
 		return
 	}
 }
@@ -122,20 +140,20 @@ func (lb *LoadBalancer) Start() {
 	log.Println("Server gracefully stopped")
 }
 
-func statusCheck(url string) (server.Stats, error) {
+func statusCheck(url string) (StatsResponse, error) {
 	client := http.Client{
 		Timeout: 5 * time.Second,
 	}
 	resp, err := client.Get(url + "/status")
 	if err != nil {
 		log.Println()
-		return server.Stats{}, errors.New(fmt.Sprint(url, " unreachable. Error: ", err))
+		return StatsResponse{}, errors.New(fmt.Sprint(url, " unreachable. Error: ", err))
 	}
 
-	var status server.Stats
+	var status StatsResponse
 	err = json.NewDecoder(resp.Body).Decode(&status)
 	if err != nil {
-		return server.Stats{}, err
+		return StatsResponse{}, err
 	}
 
 	return status, nil
@@ -148,12 +166,12 @@ func (lb *LoadBalancer) checkHealth() {
 			log.Println("Error checking status of", r.Url, err)
 			r.SetHealthy(false)
 		}
-		r.Stats = status
+		r.Stats.CPUUsage = status.CPUUsage
 	}
 }
 
 func (lb *LoadBalancer) healthCheckRoutine() {
-	t := time.NewTicker(time.Second * 20)
+	t := time.NewTicker(lb.statusCheckFrequency)
 	for ; true; <-t.C { // Starts a health check immediately and then every 20 seconds
 		log.Println("Starting health check...")
 		lb.checkHealth()
