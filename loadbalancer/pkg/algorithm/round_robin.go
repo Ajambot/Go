@@ -17,13 +17,27 @@ func NewRoundRobin() *RoundRobin {
 	}
 }
 
-func (r *RoundRobin) Next(servers []*server.Server) (int, error) {
+func (r *RoundRobin) Next(servers []server.Server) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(servers) == 0 {
 		r.curServer = -1
 		return -1, errors.New("List of servers is empty. Cannot select next server")
 	}
+
+	if r.curServer >= len(servers) {
+		r.curServer = -1
+	}
+
+	tries := len(servers)
 	r.curServer = (r.curServer + 1) % len(servers)
+	tries -= 1
+	for servers[r.curServer].GetHealth() == false {
+		if tries <= 0 {
+			return -1, errors.New("No healthy servers available")
+		}
+		r.curServer = (r.curServer + 1) % len(servers)
+		tries -= 1
+	}
 	return r.curServer, nil
 }

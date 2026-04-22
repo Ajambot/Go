@@ -2,7 +2,6 @@ package algorithm
 
 import (
 	"errors"
-	"fmt"
 	"loadbalancer/pkg/server"
 	"slices"
 )
@@ -20,7 +19,7 @@ func NewResourceBased() *ResourceBased {
 	return &ResourceBased{}
 }
 
-func (r *ResourceBased) Next(servers []*server.Server) (int, error) {
+func (r *ResourceBased) Next(servers []server.Server) (int, error) {
 	if len(servers) == 0 {
 		return -1, errors.New("List of servers is empty. Cannot select next server")
 	}
@@ -28,7 +27,7 @@ func (r *ResourceBased) Next(servers []*server.Server) (int, error) {
 	// [float64, int]
 
 	for i, server := range servers {
-		server_stats = append(server_stats, ResourceServerInfo{CPUUsage: server.Stats.CPUUsage, Index: i, Healthy: server.Healthy})
+		server_stats = append(server_stats, ResourceServerInfo{CPUUsage: server.GetCPUUsage(), Index: i, Healthy: server.GetHealth()})
 	}
 
 	slices.SortFunc(server_stats, func(s1, s2 ResourceServerInfo) int {
@@ -41,11 +40,12 @@ func (r *ResourceBased) Next(servers []*server.Server) (int, error) {
 		return -1
 	})
 
-	fmt.Println(server_stats)
-
 	picked_server := 0
 	for server_stats[picked_server].Healthy == false {
 		picked_server += 1
+		if picked_server >= len(server_stats) {
+			return -1, errors.New("No healthy servers")
+		}
 	}
 
 	return server_stats[picked_server].Index, nil

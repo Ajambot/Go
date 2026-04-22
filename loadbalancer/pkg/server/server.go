@@ -1,37 +1,106 @@
 package server
 
 import (
+	"errors"
 	"sync"
 	"sync/atomic"
 )
 
 type Stats struct {
-	CPUUsage    float64 `json:"CPUUsage"`
-	Connections atomic.Int32
+	cpuUsage    float64
+	connections atomic.Int32
 }
 
-type Server struct {
+type Server interface {
+	SetHealth(healthy bool)
+	GetHealth() bool
+	SetWeight(w int) error
+	GetWeight() int
+	AddConnection()
+	RemoveConnection()
+	Connections() int32
+	SetCPUUsage(usage float64) error
+	GetCPUUsage() float64
+	SetURL(url string)
+	GetURL() string
+}
+
+type server struct {
 	mu      sync.Mutex
-	Stats   Stats
-	Healthy bool
-	Url     string
-	Weight  int
+	stats   Stats
+	healthy bool
+	url     string
+	weight  int
 }
 
-func (s *Server) SetHealthy(healthy bool) {
+func NewServer(url string) *server {
+	return &server{healthy: true, url: url, weight: 1}
+}
+
+func (s *server) GetURL() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.Healthy = healthy
+	return s.url
 }
 
-func (s *Server) AddConnection() {
-	s.Stats.Connections.Add(1)
+func (s *server) SetURL(url string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.url = url
 }
 
-func (s *Server) RemoveConnection() {
-	s.Stats.Connections.Add(-1)
+func (s *server) SetHealth(healthy bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.healthy = healthy
 }
 
-func (s *Server) Connections() int32 {
-	return s.Stats.Connections.Load()
+func (s *server) GetHealth() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.healthy
+}
+
+func (s *server) SetWeight(w int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if w <= 0 {
+		return errors.New("Weight has to be >= 1")
+	}
+	s.weight = w
+	return nil
+}
+
+func (s *server) GetWeight() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.weight
+}
+
+func (s *server) AddConnection() {
+	s.stats.connections.Add(1)
+}
+
+func (s *server) RemoveConnection() {
+	s.stats.connections.Add(-1)
+}
+
+func (s *server) Connections() int32 {
+	return s.stats.connections.Load()
+}
+
+func (s *server) SetCPUUsage(usage float64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if usage < 0 {
+		return errors.New("CPUUsage cannot be a negative number")
+	}
+	s.stats.cpuUsage = usage
+	return nil
+}
+
+func (s *server) GetCPUUsage() float64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.stats.cpuUsage
 }

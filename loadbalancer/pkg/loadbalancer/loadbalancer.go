@@ -21,7 +21,7 @@ import (
 )
 
 type Scheduler interface {
-	Next([]*server.Server) (int, error)
+	Next([]server.Server) (int, error)
 }
 
 type StatsResponse struct {
@@ -29,7 +29,7 @@ type StatsResponse struct {
 }
 
 type LoadBalancer struct {
-	Servers              []*server.Server
+	Servers              []server.Server
 	statusCheckFrequency time.Duration
 	scheduler            Scheduler
 }
@@ -49,10 +49,10 @@ func MakeLB(algo string, statusCheckFrequency time.Duration) (*LoadBalancer, err
 		return nil, errors.New("Error: selected scheduling algorithm is not valid")
 	}
 
-	return &LoadBalancer{make([]*server.Server, 0), statusCheckFrequency, scheduler}, nil
+	return &LoadBalancer{make([]server.Server, 0), statusCheckFrequency, scheduler}, nil
 }
 
-func (lb *LoadBalancer) Register(server *server.Server) {
+func (lb *LoadBalancer) Register(server server.Server) {
 	lb.Servers = append(lb.Servers, server)
 }
 
@@ -67,14 +67,14 @@ func (lb *LoadBalancer) handler(w *response.Writer, req *request.Request) {
 		log.Fatal("Error", err)
 		return
 	}
-	for lb.Servers[nextServer].Healthy == false {
+	for lb.Servers[nextServer].GetHealth() == false {
 		nextServer, err = lb.scheduler.Next(lb.Servers)
 		if err != nil {
 			log.Fatal("Error", err)
 			return
 		}
 	}
-	targetUrl := lb.Servers[nextServer].Url
+	targetUrl := lb.Servers[nextServer].GetURL()
 	newReq, err := http.NewRequest(req.RequestLine.Method, targetUrl+req.RequestLine.RequestTarget, bytes.NewReader(req.Body))
 	if err != nil {
 		log.Fatal("Error", err)
@@ -160,13 +160,16 @@ func statusCheck(url string) (StatsResponse, error) {
 }
 
 func (lb *LoadBalancer) checkHealth() {
-	for _, r := range lb.Servers {
-		status, err := statusCheck(r.Url)
+	for i, r := range lb.Servers {
+		status, err := statusCheck(r.GetURL())
 		if err != nil {
-			log.Println("Error checking status of", r.Url, err)
-			r.SetHealthy(false)
+			log.Println("Error checking status of", r.GetURL(), err)
+			r.SetHealth(false)
 		}
-		r.Stats.CPUUsage = status.CPUUsage
+		err = r.SetCPUUsage(status.CPUUsage)
+		if err != nil {
+			log.Println("Error: Could not set CPUUsage in server", i, err)
+		}
 	}
 }
 

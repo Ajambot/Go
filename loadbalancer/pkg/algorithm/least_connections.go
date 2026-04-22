@@ -3,7 +3,6 @@ package algorithm
 import (
 	"errors"
 	"loadbalancer/pkg/server"
-	"log"
 	"slices"
 )
 
@@ -20,14 +19,14 @@ func NewLeastConnections() *LeastConnections {
 	return &LeastConnections{}
 }
 
-func (r *LeastConnections) Next(servers []*server.Server) (int, error) {
+func (r *LeastConnections) Next(servers []server.Server) (int, error) {
 	if len(servers) == 0 {
 		return -1, errors.New("List of servers is empty. Cannot select next server")
 	}
 	server_stats := []ConnectionsServerInfo{}
 
 	for i, server := range servers {
-		server_stats = append(server_stats, ConnectionsServerInfo{Connections: int(server.Connections()), Index: i, Healthy: server.Healthy})
+		server_stats = append(server_stats, ConnectionsServerInfo{Connections: int(server.Connections()), Index: i, Healthy: server.GetHealth()})
 	}
 
 	slices.SortFunc(server_stats, func(s1, s2 ConnectionsServerInfo) int {
@@ -40,11 +39,12 @@ func (r *LeastConnections) Next(servers []*server.Server) (int, error) {
 		return -1
 	})
 
-	log.Println(server_stats)
-
 	picked_server := 0
 	for server_stats[picked_server].Healthy == false {
 		picked_server += 1
+		if picked_server >= len(server_stats) {
+			return -1, errors.New("No healthy servers")
+		}
 	}
 
 	return server_stats[picked_server].Index, nil
